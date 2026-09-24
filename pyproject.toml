@@ -21,7 +21,9 @@ dependencies = [
     "loguru",
     "tiktoken",
     "sentencepiece",
-    "protobuf"
+    "protobuf",
+    "fastapi>=0.100.0",
+    "uvicorn>=0.23.0"
 ]
 
 [project.scripts]
