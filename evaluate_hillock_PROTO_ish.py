@@ -11,7 +11,7 @@ import sqlite3
 import re
 import time
 import numpy as np
-from main import IntegratedHillock
+from engine import IntegratedHillock
 
 # Set up logging to file instead of stdout to keep output clean
 logging.basicConfig(level=logging.ERROR)
