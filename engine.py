@@ -9,10 +9,11 @@ import logging
 import urllib.request
 from typing import List, Tuple, Set, Optional
 
-from config import DB_FILE, OLLAMA_MODEL, OLLAMA_URL, HDC_THRESHOLD
+from config import DB_FILE, OLLAMA_MODEL, LLM_BASE_URL, HDC_THRESHOLD
 from database import SQLiteKnowledgeGraph
 from plasticity import HebbianPlasticityEngine
 from reservoir import HyperdimensionalReservoir, load_lightweight_glove
+
 
 logger = logging.getLogger("Hillock.Engine")
 
@@ -99,14 +100,16 @@ class IntegratedHillock:
             return []
 
     def query_ollama_stream(self, prompt: str, system_prompt: str) -> Optional[str]:
-        """Token-streaming Ollama generator for real-time console rendering."""
-        url = OLLAMA_URL
+        """Token-streaming generator using the universal OpenAI-compatible format."""
+        url = LLM_BASE_URL
         payload = {
             "model": self.ollama_model,
-            "prompt": prompt,
-            "system": system_prompt,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt}
+            ],
             "stream": True,
-            "options": {"temperature": 0.0}
+            "temperature": 0.0
         }
         try:
             req = urllib.request.Request(
@@ -116,23 +119,34 @@ class IntegratedHillock:
                 method="POST"
             )
             full_response = []
-            sys.stdout.write("Hillock (Ollama-Renderer) > ")
+            sys.stdout.write("Hillock (Renderer) > ")
             sys.stdout.flush()
 
             with urllib.request.urlopen(req, timeout=180) as response:
                 for line in response:
                     if line:
-                        chunk = json.loads(line.decode("utf-8"))
-                        token = chunk.get("response", "")
-                        sys.stdout.write(token)
-                        sys.stdout.flush()
-                        full_response.append(token)
-                        if chunk.get("done", False):
-                            break
+                        # The OpenAI stream format prefixes lines with "data: "
+                        decoded_line = line.decode("utf-8").strip()
+                        if decoded_line.startswith("data: "):
+                            data_str = decoded_line[6:]
+                            if data_str == "[DONE]":
+                                break
+                            try:
+                                chunk = json.loads(data_str)
+                                # Extract token from the OpenAI delta format
+                                if "choices" in chunk and len(chunk["choices"]) > 0:
+                                    delta = chunk["choices"][0].get("delta", {})
+                                    token = delta.get("content", "")
+                                    if token:
+                                        sys.stdout.write(token)
+                                        sys.stdout.flush()
+                                        full_response.append(token)
+                            except json.JSONDecodeError:
+                                continue
             print()  # Newline after stream finishes
             return "".join(full_response).strip()
         except Exception as e:
-            logger.error(f"Ollama streaming error: {e}")
+            logger.error(f"LLM streaming error: {e}")
             return None
 
     def select_answering_facts(self, query: str, facts: List[Tuple[str, str, str]], threshold: float = HDC_THRESHOLD) -> List[Tuple[str, str, str, float]]:

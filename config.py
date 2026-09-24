@@ -3,7 +3,7 @@
 # File and Model Paths
 DB_FILE = "hillock_kg.db"
 OLLAMA_MODEL = "qwen3:latest"
-OLLAMA_URL = "http://localhost:11434/api/generate"
+LLM_BASE_URL = "http://localhost:11434/v1/chat/completions"
 
 # HDC Hyperparameters (v0.4.1 Recalibrated for SimHash Baseline)
 HDC_DIMENSION = 10000
