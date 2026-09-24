@@ -125,7 +125,7 @@ def main() -> None:
 
     # ------------------------------------------------------------ 6. Ingestion path
     from ingestor import get_talon_engine, ingest_document_parallel
-    from main import IntegratedHillock
+    from engine import IntegratedHillock
     from evaluate_hillock_PROTO_ish import generate_test_assets
     generate_test_assets()
 
