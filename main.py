@@ -182,6 +182,25 @@ def run_cli():
                     print(f"Hillock [SYSTEM]: Initiating bulk ingestion for '{filename}' via TALON Engine...")
                     result, _ = ingest_document_parallel(filename, hillock)
                     print(f"Hillock [SYSTEM]: {result}")
+                    
+                    # --- ACTIVE DISAMBIGUATION QUIZ ---
+                    ambiguous_facts = hillock.get_ambiguous_facts()
+                    if ambiguous_facts:
+                        print(f"\nHillock [ACTIVE LEARNING]: I found {len(ambiguous_facts)} ambiguous facts during ingestion.")
+                        for s, p, o, doc in ambiguous_facts:
+                            print(f"  Fact: [{s}] -[{p}]-> [{o}] (Source: {doc})")
+                            ans = input(f"  Who or what does the ambiguous pronoun refer to? (Type name, or press Enter to skip): ").strip()
+                            
+                            if ans:
+                                # Replace whichever side was the pronoun with the user's answer
+                                ambiguous_terms = {"he", "she", "it", "they", "this", "that", "who", "whom", "which", "his", "her"}
+                                new_s = ans if s.lower() in ambiguous_terms else s
+                                new_o = ans if o.lower() in ambiguous_terms else o
+                                
+                                hillock.resolve_ambiguous_fact(s, p, o, new_s, new_o)
+                                print(f"  -> Successfully updated to: [{new_s}] -[{p}]-> [{new_o}]\n")
+                            else:
+                                print("  -> Skipped.\n")
                 else:
                     print("Hillock [SYSTEM]: Error. Correct format is: /ingest [filename.ext]")
                 continue

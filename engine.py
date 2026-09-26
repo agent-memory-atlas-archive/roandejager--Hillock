@@ -7,6 +7,7 @@ import json
 import numpy as np
 import logging
 import urllib.request
+import sqlite3
 from typing import List, Tuple, Set, Optional
 
 from config import DB_FILE, OLLAMA_MODEL, LLM_BASE_URL, HDC_THRESHOLD
@@ -44,6 +45,49 @@ class IntegratedHillock:
         # Seed HDC codebook with initial graph entities using SimHash
         for ent_id in self.kg.get_all_entity_ids():
             self.hdc.get_or_allocate_hypervector(ent_id)
+
+    def get_ambiguous_facts(self) -> List[Tuple[str, str, str, str]]:
+        """Scans the Knowledge Graph for unresolved pronouns or vague entities."""
+        ambiguous_terms = {"he", "she", "it", "they", "this", "that", "who", "whom", "which", "his", "her"}
+        ambiguous_facts = []
+        
+        with sqlite3.connect(self.kg.db_path) as conn:
+            cursor = conn.cursor()
+            # Fetch all facts
+            cursor.execute("SELECT source_id, predicate, target_id, source_doc FROM relations")
+            for s, p, o, doc in cursor.fetchall():
+                # If the subject or object is exactly one of our ambiguous terms, flag it
+                if s.lower() in ambiguous_terms or o.lower() in ambiguous_terms:
+                    ambiguous_facts.append((s, p, o, doc))
+                    
+        return ambiguous_facts
+
+    def resolve_ambiguous_fact(self, old_s: str, p: str, old_o: str, new_s: str, new_o: str) -> None:
+        """Deletes the ambiguous fact and replaces it with the user-clarified fact."""
+        # Format the new entities
+        new_s_clean = self.resolve_entity_identity(new_s)
+        new_o_clean = self.resolve_entity_identity(new_o)
+        
+        with sqlite3.connect(self.kg.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA foreign_keys = ON;")
+            # Delete the old garbage fact
+            cursor.execute("DELETE FROM relations WHERE source_id=? AND predicate=? AND target_id=?", (old_s, p, old_o))
+            
+            # Ensure the new entities exist in the entities table
+            cursor.execute("INSERT OR IGNORE INTO entities (id, name, type) VALUES (?, ?, 'Generic')", (new_s_clean, new_s_clean.replace("_", " ")))
+            cursor.execute("INSERT OR IGNORE INTO entities (id, name, type) VALUES (?, ?, 'Generic')", (new_o_clean, new_o_clean.replace("_", " ")))
+            
+            # Insert the clarified fact with a high confidence stamp
+            cursor.execute("""
+                INSERT OR REPLACE INTO relations (source_id, predicate, target_id, source_doc, confidence) 
+                VALUES (?, ?, ?, 'human_disambiguation', 1.0)
+            """, (new_s_clean, p, new_o_clean))
+            conn.commit()
+            
+        # Allocate HDC hypervectors for the new entities so they can be searched
+        self.hdc.get_or_allocate_hypervector(new_s_clean)
+        self.hdc.get_or_allocate_hypervector(new_o_clean)
 
     def is_question(self, text: str) -> bool:
         cleaned = text.strip().lower()
