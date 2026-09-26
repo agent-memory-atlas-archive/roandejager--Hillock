@@ -7,6 +7,7 @@ import json
 import numpy as np
 import logging
 import urllib.request
+import sqlite3
 from typing import List, Tuple, Set, Optional
 
 from config import DB_FILE, OLLAMA_MODEL, LLM_BASE_URL, HDC_THRESHOLD
@@ -44,6 +45,49 @@ class IntegratedHillock:
         # Seed HDC codebook with initial graph entities using SimHash
         for ent_id in self.kg.get_all_entity_ids():
             self.hdc.get_or_allocate_hypervector(ent_id)
+
+    def get_ambiguous_facts(self) -> List[Tuple[str, str, str, str]]:
+        """Scans the Knowledge Graph for unresolved pronouns or vague entities."""
+        ambiguous_terms = {"he", "she", "it", "they", "this", "that", "who", "whom", "which", "his", "her"}
+        ambiguous_facts = []
+        
+        with sqlite3.connect(self.kg.db_path) as conn:
+            cursor = conn.cursor()
+            # Fetch all facts
+            cursor.execute("SELECT source_id, predicate, target_id, source_doc FROM relations")
+            for s, p, o, doc in cursor.fetchall():
+                # If the subject or object is exactly one of our ambiguous terms, flag it
+                if s.lower() in ambiguous_terms or o.lower() in ambiguous_terms:
+                    ambiguous_facts.append((s, p, o, doc))
+                    
+        return ambiguous_facts
+
+    def resolve_ambiguous_fact(self, old_s: str, p: str, old_o: str, new_s: str, new_o: str) -> None:
+        """Deletes the ambiguous fact and replaces it with the user-clarified fact."""
+        # Format the new entities
+        new_s_clean = self.resolve_entity_identity(new_s)
+        new_o_clean = self.resolve_entity_identity(new_o)
+        
+        with sqlite3.connect(self.kg.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA foreign_keys = ON;")
+            # Delete the old garbage fact
+            cursor.execute("DELETE FROM relations WHERE source_id=? AND predicate=? AND target_id=?", (old_s, p, old_o))
+            
+            # Ensure the new entities exist in the entities table
+            cursor.execute("INSERT OR IGNORE INTO entities (id, name, type) VALUES (?, ?, 'Generic')", (new_s_clean, new_s_clean.replace("_", " ")))
+            cursor.execute("INSERT OR IGNORE INTO entities (id, name, type) VALUES (?, ?, 'Generic')", (new_o_clean, new_o_clean.replace("_", " ")))
+            
+            # Insert the clarified fact with a high confidence stamp
+            cursor.execute("""
+                INSERT OR REPLACE INTO relations (source_id, predicate, target_id, source_doc, confidence) 
+                VALUES (?, ?, ?, 'human_disambiguation', 1.0)
+            """, (new_s_clean, p, new_o_clean))
+            conn.commit()
+            
+        # Allocate HDC hypervectors for the new entities so they can be searched
+        self.hdc.get_or_allocate_hypervector(new_s_clean)
+        self.hdc.get_or_allocate_hypervector(new_o_clean)
 
     def is_question(self, text: str) -> bool:
         cleaned = text.strip().lower()
@@ -149,7 +193,7 @@ class IntegratedHillock:
             logger.error(f"LLM streaming error: {e}")
             return None
 
-    def select_answering_facts(self, query: str, facts: List[Tuple[str, str, str]], threshold: float = HDC_THRESHOLD) -> List[Tuple[str, str, str, float]]:
+    def select_answering_facts(self, query: str, facts: List[Tuple[str, str, str, str]], threshold: float = HDC_THRESHOLD) -> List[Tuple[str, str, str, str, float]]:
         if not facts:
             return []
 
@@ -175,7 +219,7 @@ class IntegratedHillock:
             return []
 
         scored_facts = []
-        for s, p, o in facts:
+        for s, p, o, doc in facts:
             s_resolved = self.resolve_entity_identity(s)
             o_resolved = self.resolve_entity_identity(o)
 
@@ -201,9 +245,9 @@ class IntegratedHillock:
                 print(f"  [DEBUG HDC HYDRA]: Fact [{s} {p} {o}] MaxSim: {similarity:.4f} | PredAlign: {pred_max_align:.4f}")
 
             if similarity >= threshold and pred_max_align >= 0.35:
-                scored_facts.append((s, p, o, similarity))
+                scored_facts.append((s, p, o, doc, similarity))
 
-        scored_facts.sort(key=lambda x: x[3], reverse=True)
+        scored_facts.sort(key=lambda x: x[4], reverse=True)
         return scored_facts
 
     def execute_chat_turn(self, query: str) -> Tuple[str, List[Tuple[str, float]], List[Tuple[str, float]], str]:
@@ -254,42 +298,65 @@ class IntegratedHillock:
                 matched_facts = self.select_answering_facts(query, candidate_facts)
                 if matched_facts:
                     active_update_set = active_entities.copy()
-                    for s, p, o, _ in matched_facts:
+                    for s, p, o, doc, _ in matched_facts:
                         active_update_set.add(s)
                         active_update_set.add(o)
                     self.plasticity.update_associations(active_update_set)
 
                     if len(matched_facts) == 1:
-                        s, p, o, _ = matched_facts[0]
-                        facts_str = f"[{s.replace('_', ' ')} {p} {o.replace('_', ' ')}]"
+                        s, p, o, doc, _ = matched_facts[0]
+                        facts_str = f"[{s.replace('_', ' ')} {p} {o.replace('_', ' ')}] (Source: {doc})"
                         source_id = s
                     else:
-                        facts_str = " | ".join([f"[{s.replace('_', ' ')} {p} {o.replace('_', ' ')}]" for s, p, o, _ in matched_facts])
+                        facts_str = " | ".join([f"[{s.replace('_', ' ')} {p} {o.replace('_', ' ')}] (Source: {doc})" for s, p, o, doc, _ in matched_facts])
                         source_id = matched_facts[0][0]
 
                     primed_info = self.plasticity.get_associated_priming_context(source_id)
-                    system_prompt, render_prompt = self._get_mode_prompts(query, facts_str, primed_info, hdc_fingerprint)
+                    system_prompt, render_prompt = self._get_mode_prompts(query, facts_str, primed_info, hdc_fingerprint, is_refusal=False)
 
                     llm_response = self.query_ollama_stream(render_prompt, system_prompt)
                     if llm_response:
-                        return f"Hillock (Ollama-Renderer) > {llm_response}", primed_info, hdc_fingerprint, "RENDER_SUCCESS"
+                        return f"Hillock (Renderer) > {llm_response}", primed_info, hdc_fingerprint, "RENDER_SUCCESS"
                     else:
                         fallback_msg = f"Hillock (Simulated) > Handshake resolved: {facts_str}."
                         print(fallback_msg)
                         return fallback_msg, primed_info, hdc_fingerprint, "RENDER_FALLBACK"
 
+            # --- GATE FAILED: Trigger Refusal Logic ---
+        
+        # If the user is in STRICT mode, keep it fast and robotic
+        if self.verbosity_mode == "STRICT":
             refusal_msg = "Hillock > I do not have verified information about that."
             print(refusal_msg)
             return refusal_msg, [], hdc_fingerprint, "DETERMINISTIC_GATED_FALLBACK"
 
-        refusal_msg = "Hillock > I do not have verified information about that."
-        print(refusal_msg)
-        return refusal_msg, [], hdc_fingerprint, "DETERMINISTIC_GATED_FALLBACK"
+        # If in BALANCED or CONVERSATIONAL mode, let the LLM render a polite refusal
+        system_prompt, render_prompt = self._get_mode_prompts(query, "", [], hdc_fingerprint, is_refusal=True)
+        llm_response = self.query_ollama_stream(render_prompt, system_prompt)
+        
+        if llm_response:
+            return f"Hillock (Renderer) > {llm_response}", [], hdc_fingerprint, "CONVERSATIONAL_REFUSAL"
+        else:
+            # Fallback just in case Ollama crashes
+            refusal_msg = "Hillock (Simulated) > I do not have verified information about that."
+            print(refusal_msg)
+            return refusal_msg, [], hdc_fingerprint, "DETERMINISTIC_GATED_FALLBACK"
 
-    def _get_mode_prompts(self, query: str, facts_str: str, primed_info: list, hdc_fingerprint: list) -> Tuple[str, str]:
+    def _get_mode_prompts(self, query: str, facts_str: str, primed_info: list, hdc_fingerprint: list, is_refusal: bool = False) -> Tuple[str, str]:
         priming_str = ", ".join([f"{node} (strength {w:.2f})" for node, w in primed_info[:2]]) if primed_info else "None"
         fingerprint_str = ", ".join([f"{node} (match {sim:.2f})" for node, sim in hdc_fingerprint]) if hdc_fingerprint else "None"
 
+        # 1. Handle Conversational Refusals
+        if is_refusal:
+            system_prompt = (
+                "You are a helpful, conversational assistant. The user asked a question, but your verified memory engine "
+                "contains no facts about it. Politely and warmly explain that you don't know, and ask if they have a "
+                "document you can read to learn about it. Do NOT invent an answer."
+            )
+            render_prompt = f"Question: {query}\nMemory: No verified facts found."
+            return system_prompt, render_prompt
+
+        # 2. Handle STRICT Mode
         if self.verbosity_mode == "STRICT":
             system_prompt = (
                 "You are a professional fact renderer. Translate ONLY the provided fact into one sentence. "
@@ -297,11 +364,12 @@ class IntegratedHillock:
             )
             render_prompt = f"Fact: {facts_str}"
 
+        # 3. Handle BALANCED Mode (Now cites sources)
         elif self.verbosity_mode == "BALANCED":
             system_prompt = (
                 "You are a knowledgeable assistant. Answer the question using the verified facts provided. "
-                "You may add one short sentence of natural conversational context if it flows naturally, "
-                "but do NOT invent specific facts, dates, or claims not in the verified data."
+                "You may add one short sentence of natural conversational context, but do NOT invent specific facts. "
+                "Always briefly mention the source document provided in the fact."
             )
             render_prompt = (
                 f"Verified fact: {facts_str}\n"
@@ -309,12 +377,13 @@ class IntegratedHillock:
                 f"Question: {query}"
             )
 
-        else:  # CONVERSATIONAL
+        # 4. Handle CONVERSATIONAL Mode (Now proactively suggests Hebbian connections)
+        else:
             system_prompt = (
                 "You are a curious, warm assistant with access to a verified knowledge base. "
-                "Answer naturally and conversationally. The verified fact you must include is provided. "
-                "You may expand slightly using the memory context provided, but always be clear "
-                "that the verified fact is the grounded answer. Never invent specific data."
+                "Answer naturally and conversationally using the verified fact. "
+                "If memory associations are provided, casually ask the user if they would like to know more about the top association to keep the conversation flowing. "
+                "Never invent specific data."
             )
             render_prompt = (
                 f"Verified fact: {facts_str}\n"
