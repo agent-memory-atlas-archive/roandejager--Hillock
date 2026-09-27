@@ -257,19 +257,19 @@ class IntegratedHillock:
         query_clean = re.sub(r"[^\w\s]", "", query).strip().lower()
 
         if query_clean in greetings or len(query_clean.split()) < 2:
-            dummy_primed = []
-            dummy_fingerprint = []
             if self.verbosity_mode == "CONVERSATIONAL":
-                msg = "Hillock > Hello! I am your conversational hillock. Ask me any factual questions about my indexed knowledge."
-            elif self.verbosity_mode == "BALANCED":
-                msg = "Hillock > Hello. Ready for factual questions."
-            else:
-                msg = "Hillock > I do not have verified information about that."
+                sys_prompt = "You are a warm, chatty, and highly engaging personal AI assistant. The user just greeted you. Greet them back naturally, warmly, and ask what they would like to learn from your memory today."
+                llm_response = self.query_ollama_stream(f"User says: {query}", sys_prompt)
+                if llm_response:
+                    return f"Hillock (Renderer) > {llm_response}", [], [], "GREETING"
+            
+            # Fallback for STRICT and BALANCED modes
+            msg = "Hillock > Hello. Ready for factual questions."
             print(msg)
-            return msg, dummy_primed, dummy_fingerprint, "GREETING"
+            return msg, [], [], "GREETING"
 
         active_entities = self.link_entities(query)
-
+        
         if not active_entities:
             pronouns = {"he", "she", "his", "her", "him", "they", "them", "it"}
             query_words = set(re.sub(r"[^\w\s]", "", query).lower().split())
@@ -380,10 +380,12 @@ class IntegratedHillock:
         # 4. Handle CONVERSATIONAL Mode (Now proactively suggests Hebbian connections)
         else:
             system_prompt = (
-                "You are a curious, warm assistant with access to a verified knowledge base. "
-                "Answer naturally and conversationally using the verified fact. "
-                "If memory associations are provided, casually ask the user if they would like to know more about the top association to keep the conversation flowing. "
-                "Never invent specific data."
+                "You are a highly conversational, friendly, and engaging personal AI assistant. "
+                "Your personality is warm, chatty, and helpful. "
+                "You must answer the user's question using ONLY the provided 'Verified fact'. "
+                "You are encouraged to wrap the fact in natural, engaging dialogue. "
+                "If memory associations are provided, seamlessly weave them into the conversation by asking if they want to hear about them. "
+                "Do NOT invent any facts, dates, or names outside the verified data."
             )
             render_prompt = (
                 f"Verified fact: {facts_str}\n"
