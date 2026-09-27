@@ -324,7 +324,7 @@ class ZeroShotRelationExtractor:
         self.device = device
         self.model = None
 
-    def extract_relations(self, sentence: str, candidate_labels: List[str], threshold: float = 0.42) -> List[Dict[str, str]]:
+    def extract_relations(self, sentence: str, candidate_labels: List[str], threshold: float = 0.30) -> List[Dict[str, str]]:
         if self.model is None:
             if not self.load_model():
                 return []
