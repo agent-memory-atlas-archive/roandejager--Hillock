@@ -5,7 +5,7 @@
 ![License](https://img.shields.io/badge/license-AGPL--3.0-blue)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![VRAM](https://img.shields.io/badge/VRAM-%3C1.2GB-brightgreen)
-![Status](https://img.shields.io/badge/status-v0.6.1-orange)
+![Status](https://img.shields.io/badge/status-v0.7.0-orange)
 
 Traditional local RAG is heavy. Running dense vector databases and using 8B+ generative LLMs just to parse documents burns VRAM, chokes mid-range GPUs, and still hallucinates when asked about things it doesn't know.
 
@@ -107,7 +107,7 @@ python verify_hillock.py
 
 The full, detailed roadmap is tracked in **[Issue #1: The Path to v1.0](https://github.com/roandejager/Hillock/issues/1)**. 
 
-Our immediate next steps focus on optimizing the engine for Small Language Models (SLMs) to create a conversational, proactive agent, followed by extreme hardware optimizations like bit-packed hypervectors to push CPU speeds even higher.
+With our conversational agent update complete, our immediate next steps focus on extreme hardware optimizations—like bit-packed hypervectors and ONNX runtime exports—to push CPU speeds even higher, followed by automated data connectors for frictionless ingestion.
 
 ---
 
