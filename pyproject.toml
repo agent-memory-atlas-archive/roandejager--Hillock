@@ -10,6 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "numpy>=1.24.0",
+    "onnxruntime>=1.16.0",
     "psutil>=5.9.0",
     "pypdf>=3.17.0",
     "torch>=2.0.0",
@@ -24,6 +25,12 @@ dependencies = [
     "protobuf",
     "fastapi>=0.100.0",
     "uvicorn>=0.23.0"
+]
+
+[project.optional-dependencies]
+onnx-export = [
+    "onnx>=1.14.0",
+    "onnxconverter-common>=1.13.0"
 ]
 
 [project.scripts]

@@ -69,6 +69,7 @@ def ingest_document_parallel(file_path: str, hillock) -> Tuple[str, Dict[str, fl
     Ingests documents using the TALON Engine.
     Returns (summary_str, timing_stats_dict).
     """
+    global _talon_instance
     t_start = time.perf_counter()
 
     try:
@@ -219,4 +220,6 @@ def ingest_document_parallel(file_path: str, hillock) -> Tuple[str, Dict[str, fl
         f"  * Total Processing Time      : {total_time:.2f} seconds\n"
         f"========================================================"
     )
+    talon.unload_models()
+    _talon_instance = None
     return summary, timing_stats

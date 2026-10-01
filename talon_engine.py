@@ -316,6 +316,100 @@ class DynamicPredicateRouter:
             return [self.taxonomy[:top_k] for _ in sentences]
 
 
+class ONNXDynamicPredicateRouter:
+    """Stage 2 predicate router using a CPU ONNX Runtime MiniLM session."""
+
+    def __init__(
+        self,
+        taxonomy: List[str] = DEFAULT_PREDICATE_TAXONOMY,
+        model_path: str = "minilm.onnx",
+        tokenizer_name: str = "sentence-transformers/all-MiniLM-L6-v2",
+        max_seq_length: int = 256,
+        intra_op_num_threads: int = 0
+    ):
+        self.taxonomy = taxonomy
+        self.model_path = model_path
+        self.tokenizer_name = tokenizer_name
+        self.max_seq_length = max_seq_length
+        self.intra_op_num_threads = intra_op_num_threads
+        self.model = None
+        self.tokenizer = None
+        self.taxonomy_embeddings = None
+        self.input_names = set()
+
+    def load_model(self) -> bool:
+        if self.model is not None and self.tokenizer is not None and self.taxonomy_embeddings is not None:
+            return True
+
+        try:
+            import onnxruntime as ort
+            from transformers import AutoTokenizer
+
+            options = ort.SessionOptions()
+            options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+            if self.intra_op_num_threads > 0:
+                options.intra_op_num_threads = self.intra_op_num_threads
+
+            self.model = ort.InferenceSession(
+                self.model_path,
+                sess_options=options,
+                providers=["CPUExecutionProvider"]
+            )
+            self.input_names = {item.name for item in self.model.get_inputs()}
+            self.tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_name)
+            taxonomy_phrases = [predicate.replace("_", " ") for predicate in self.taxonomy]
+            self.taxonomy_embeddings = self._encode(taxonomy_phrases)
+            logger.info("Loaded ONNX MiniLM and cached %d predicate embeddings.", len(self.taxonomy))
+            return True
+        except Exception as e:
+            self.model = None
+            self.tokenizer = None
+            self.taxonomy_embeddings = None
+            logger.error("Failed to load ONNX predicate router: %s", e)
+            return False
+
+    def _encode(self, texts: List[str]) -> np.ndarray:
+        encoded = self.tokenizer(
+            texts,
+            padding=True,
+            truncation=True,
+            max_length=self.max_seq_length,
+            return_tensors="np"
+        )
+        feeds = {
+            name: np.asarray(encoded[name])
+            for name in self.input_names
+            if name in encoded
+        }
+        token_embeddings = np.asarray(self.model.run(None, feeds)[0], dtype=np.float32)
+        attention_mask = np.asarray(feeds["attention_mask"], dtype=np.float32)[..., np.newaxis]
+        summed_embeddings = np.sum(token_embeddings * attention_mask, axis=1)
+        token_counts = np.maximum(np.sum(attention_mask, axis=1), 1.0)
+        sentence_embeddings = summed_embeddings / token_counts
+        norms = np.linalg.norm(sentence_embeddings, axis=1, keepdims=True)
+        return sentence_embeddings / np.maximum(norms, 1e-12)
+
+    def select_top_predicates_batch(self, sentences: List[str], top_k: int = 10) -> List[List[str]]:
+        """Rank predicates by the same normalized cosine similarity as the PyTorch router."""
+        if not sentences:
+            return []
+
+        if self.model is None or self.tokenizer is None or self.taxonomy_embeddings is None:
+            if not self.load_model():
+                return [self.taxonomy[:top_k] for _ in sentences]
+
+        try:
+            sentence_embeddings = self._encode(sentences)
+            cosine_scores = sentence_embeddings @ self.taxonomy_embeddings.T
+            return [
+                [self.taxonomy[idx] for idx in np.argsort(scores)[::-1][:top_k]]
+                for scores in cosine_scores
+            ]
+        except Exception as e:
+            logger.error("ONNX batch predicate routing error: %s", e)
+            return [self.taxonomy[:top_k] for _ in sentences]
+
+
 class ZeroShotRelationExtractor:
     """Stage 3: Zero-Shot Span Relation Extractor using GLiREL Large (High Precision Model)."""
 
@@ -468,7 +562,10 @@ class TalonEngine:
     def __init__(self, device: str = "cuda:0"):
         self.device = device
         self.coref = CoreferenceResolver(device=device)
-        self.router = DynamicPredicateRouter(device=device)
+        if os.path.isfile("minilm.onnx"):
+            self.router = ONNXDynamicPredicateRouter(model_path="minilm.onnx")
+        else:
+            self.router = DynamicPredicateRouter(device=device)
         self.extractor = ZeroShotRelationExtractor(device=device)
         self.t_first_triple: Optional[float] = None
         self.t_last_triple: Optional[float] = None
@@ -478,6 +575,16 @@ class TalonEngine:
         self.router.load_model()
         self.extractor.load_model()
         logger.info("TALON Engine pre-warm complete! Ready for batched extractions.")
+
+    def unload_models(self):
+        import gc
+        import torch
+
+        self.coref.model = None
+        self.router.model = None
+        self.extractor.model = None
+        gc.collect()
+        torch.cuda.empty_cache()
 
     def process_document(self, document_text: str, batch_size: int = 16) -> List[Dict[str, str]]:
         logger.info("=== Starting TALON High-Speed Ingestion Pipeline (CUDA Batched) ===")
