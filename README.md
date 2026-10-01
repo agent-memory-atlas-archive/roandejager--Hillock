@@ -54,6 +54,22 @@ pip install -e .
 python -m spacy download en_core_web_sm
 ```
 
+### Optional: ONNX CPU Predicate Routing
+
+Install the ONNX export tools and create the FP16 MiniLM model:
+```bash
+pip install -e ".[onnx-export]"
+python export_to_onnx.py
+```
+
+This writes `minilm.onnx` with dynamic batch and sequence dimensions. The ONNX router uses the CPU execution provider and the same mean-pooled, normalized cosine ranking as the PyTorch predicate router:
+```python
+from talon_engine import ONNXDynamicPredicateRouter
+
+router = ONNXDynamicPredicateRouter(model_path="minilm.onnx")
+predicates = router.select_top_predicates_batch(["Marie Curie was born in Warsaw."])
+```
+
 ---
 
 ## 🕹️ How to Use Hillock

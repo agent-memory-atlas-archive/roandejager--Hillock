@@ -13,6 +13,68 @@ from typing import Dict, List, Tuple, Optional
 from config import HDC_DIMENSION, HDC_DECAY, GLOVE_PATH, GLOVE_MAX_VOCAB, GLOVE_DIM
 
 
+def pack_hypervector(bipolar_hv: np.ndarray) -> np.ndarray:
+    """Pack a bipolar hypervector into uint64 words using one bit per dimension."""
+    binary_hv = np.asarray(bipolar_hv) > 0
+    packed_bytes = np.packbits(binary_hv, bitorder="little")
+    padding = (-packed_bytes.size) % np.dtype(np.uint64).itemsize
+    if padding:
+        packed_bytes = np.pad(packed_bytes, (0, padding))
+    return packed_bytes.view(np.uint64)
+
+
+def _hamming_counts(packed_xor: np.ndarray, dimension: int) -> np.ndarray:
+    n_bytes = (dimension + 7) // 8
+    xor_bytes = np.ascontiguousarray(packed_xor).view(np.uint8)
+    xor_bytes = xor_bytes.reshape(packed_xor.shape[:-1] + (packed_xor.shape[-1] * 8,))
+    xor_bytes[..., n_bytes:] = 0
+    remainder = dimension % 8
+    if remainder:
+        xor_bytes[..., n_bytes - 1] &= (1 << remainder) - 1
+
+    xor_words = xor_bytes.reshape(packed_xor.shape[:-1] + (packed_xor.shape[-1], 8))
+    xor_words = xor_words.view(np.uint64).reshape(packed_xor.shape)
+    bit_count = getattr(np, "bitwise_count", None)
+    if bit_count is not None:
+        return bit_count(xor_words).sum(axis=-1, dtype=np.uint64)
+
+    counts = np.fromiter(
+        (int(word).bit_count() for word in xor_words.flat),
+        dtype=np.uint8,
+        count=xor_words.size
+    )
+    return counts.reshape(xor_words.shape).sum(axis=-1, dtype=np.uint64)
+
+
+def _packed_pairwise_cosine_similarity(
+    packed_A: np.ndarray,
+    packed_B: np.ndarray,
+    dimension: int
+) -> np.ndarray:
+    packed_xor = np.bitwise_xor(packed_A[:, np.newaxis, :], packed_B[np.newaxis, :, :])
+    hamming_distances = _hamming_counts(packed_xor, dimension)
+    return 1.0 - (2.0 * hamming_distances / dimension)
+
+
+def hamming_cosine_similarity(packed_A: np.ndarray, packed_B: np.ndarray, D: int = 10000) -> float:
+    """Compute bipolar cosine similarity from packed binary hypervectors."""
+    if D <= 0:
+        raise ValueError("D must be a positive dimension.")
+
+    packed_A = np.asarray(packed_A, dtype=np.uint64)
+    packed_B = np.asarray(packed_B, dtype=np.uint64)
+    if packed_A.ndim != 1 or packed_B.ndim != 1:
+        raise ValueError("Packed hypervectors must be one-dimensional.")
+
+    required_words = (D + 63) // 64
+    if packed_A.size < required_words or packed_B.size < required_words:
+        raise ValueError(f"Packed hypervectors must contain at least {required_words} uint64 words for D={D}.")
+
+    packed_xor = np.bitwise_xor(packed_A[:required_words], packed_B[:required_words])
+    hamming = int(_hamming_counts(packed_xor, D))
+    return 1.0 - (2.0 * hamming / D)
+
+
 def load_lightweight_glove(
     glove_path=GLOVE_PATH,
     max_vocab=GLOVE_MAX_VOCAB,
@@ -198,35 +260,31 @@ class HyperdimensionalReservoir:
 
     def hydra_late_interaction_maxsim(self, query_hvs: List[np.ndarray], fact_hvs: List[np.ndarray], tau_early: float = 0.20) -> float:
         """
-        HYDRA: Bipolar Late-Interaction MaxSim scoring via Sub-Dimensional Projection Cascade.
-        Operates directly in raw Cosine space [-1.0, 1.0] without artificial noise floor inflation.
+        HYDRA: Bit-packed bipolar MaxSim scoring with a sub-dimensional rejection gate.
+        Operates in raw Cosine space [-1.0, 1.0] without artificial noise floor inflation.
         """
         if not query_hvs or not fact_hvs:
             return 0.0
 
-        N_q = len(query_hvs)
-
-        Q_full = np.array(query_hvs, dtype=np.float32)
-        F_full_T = np.array(fact_hvs, dtype=np.float32).T
-        
         D_full = self.D
-        D_sub = 2000
+        D_sub = min(2000, D_full)
 
-        # Stage 1: Fast evaluation on 2,000 dimensions (Raw Cosine scale)
-        Q_sub = Q_full[:, :D_sub]
-        F_sub_T = F_full_T[:D_sub, :]
-
-        dot_sub = np.dot(Q_sub, F_sub_T)
-        max_sims_sub = np.max(dot_sub, axis=1) / D_sub
+        # Stage 1: Fast evaluation on the first 2,000 dimensions.
+        Q_sub = np.stack([pack_hypervector(hv[:D_sub]) for hv in query_hvs])
+        F_sub = np.stack([pack_hypervector(hv[:D_sub]) for hv in fact_hvs])
+        dot_sub = _packed_pairwise_cosine_similarity(Q_sub, F_sub, D_sub)
+        max_sims_sub = np.max(dot_sub, axis=1)
         score_sub = float(np.mean(max_sims_sub))
 
         # Early Rejection Gate in raw cosine space
         if score_sub < tau_early:
             return score_sub
 
-        # Stage 2: Full evaluation on 10,000 dimensions
-        dot_full = np.dot(Q_full, F_full_T)
-        max_sims_full = np.max(dot_full, axis=1) / D_full
+        # Stage 2: Full evaluation on all dimensions.
+        Q_full = np.stack([pack_hypervector(hv[:D_full]) for hv in query_hvs])
+        F_full = np.stack([pack_hypervector(hv[:D_full]) for hv in fact_hvs])
+        dot_full = _packed_pairwise_cosine_similarity(Q_full, F_full, D_full)
+        max_sims_full = np.max(dot_full, axis=1)
         score_full = float(np.mean(max_sims_full))
 
         return score_full
