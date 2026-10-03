@@ -132,22 +132,25 @@ With our conversational agent and performance updates complete, our immediate ne
 
 ---
 
-## 💼 Commercial Dual Licensing
+## 💼 Commercial Licensing & Enterprise Options
 
-Hillock is free and open-source under the **GNU Affero General Public License v3.0 (AGPL-3.0)**. Under the terms of the AGPL, any company or developer building closed-source, proprietary software on top of Hillock must also release their entire proprietary codebase publicly under the AGPL-3.0.
+Hillock is dual-licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)** and a **Commercial Closed-Source License**. 
 
-If you are a startup, enterprise, or commercial developer building proprietary software and want to embed Hillock without open-sourcing your own application code, you must obtain an **AGPL-Exempt Commercial License**.
+If you are embedding Hillock inside a closed-source product, proprietary SaaS, or on-premise application without releasing your source code under AGPL-3.0, you must purchase a Commercial License.
 
-### What the commercial license includes:
+### What the Commercial License Includes
 * **AGPL-3.0 Exemption:** Keep your product, custom integrations, and intellectual property completely closed-source and proprietary.
 * **Full Legal Indemnity:** Commercial protection to distribute Hillock inside your proprietary apps, on-premise tools, or SaaS backends.
 * **Direct Integration Support:** Priority email support directly with the maintainer for architecture design, performance tuning, and hardware pipelines.
 
-### Pricing:
-* **$49 per month** : [Purchase Monthly License](https://hillock.lemonsqueezy.com/checkout/buy/8c0f191c-e488-479b-818a-0d87226b638e)
-* **$499 per year** : [Purchase Annual License](https://hillock.lemonsqueezy.com/checkout/buy/1566c0ba-6432-48ec-8e7c-8259a058bcd1)
+### License Tiers
 
-*If you need custom SLA terms, bespoke enterprise deployments, or custom relation extraction schemas, reach out directly at [contact.roandejager@gmail.com](mailto:contact.roandejager@gmail.com).*
+* **Startup License ($49/mo or $499/yr):** Ideal for solo developers, indie hackers, and early-stage startups embedding Hillock into a single proprietary product.
+  * 👉 **[Purchase Monthly License ($49/mo)](https://hillock.lemonsqueezy.com/checkout/buy/8c0f191c-e488-479b-818a-0d87226b638e)**
+  * 👉 **[Purchase Annual License ($499/yr)](https://hillock.lemonsqueezy.com/checkout/buy/1566c0ba-6432-48ec-8e7c-8259a058bcd1)**
+
+* **Enterprise License & Custom Deployment ($2,500+/yr):** For companies requiring custom SLAs, dedicated integration engineering, custom relation schemas, or invoice/PO payments.
+  * ✉️️ **[Contact Maintainer for Enterprise Licensing](mailto:contact.roandejager@gmail.com?subject=Hillock%20Enterprise%20Licensing)**
 
 ---
 
