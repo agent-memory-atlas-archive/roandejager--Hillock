@@ -1,6 +1,7 @@
 <p align="center">
-  <img src="assets/hillock_banner.png" alt="Hillock Banner" width="100%">
+  <img src="assets/hillock_banner.jpg" alt="Hillock Banner" width="100%">
 </p>
+
 # Hillock
 
 **A lightweight, 100% local memory engine built for edge hardware.**
