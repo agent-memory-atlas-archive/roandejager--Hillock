@@ -6,6 +6,7 @@
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![VRAM](https://img.shields.io/badge/VRAM-%3C1.2GB-brightgreen)
 ![Status](https://img.shields.io/badge/status-v0.8.0-orange)
+[![Discord](https://img.shields.io/badge/Discord-Join%20Community-5865F2?logo=discord&logoColor=white)](https://discord.gg/BGUPNBcVdp)
 
 Traditional local RAG is heavy. Running dense vector databases and using 8B+ generative LLMs just to parse documents burns VRAM, chokes mid-range GPUs, and still hallucinates when asked about things it doesn't know.
 
