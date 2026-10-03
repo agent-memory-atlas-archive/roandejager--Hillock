@@ -5,7 +5,7 @@
 ![License](https://img.shields.io/badge/license-AGPL--3.0-blue)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![VRAM](https://img.shields.io/badge/VRAM-%3C1.2GB-brightgreen)
-![Status](https://img.shields.io/badge/status-v0.7.0-orange)
+![Status](https://img.shields.io/badge/status-v0.8.0-orange)
 
 Traditional local RAG is heavy. Running dense vector databases and using 8B+ generative LLMs just to parse documents burns VRAM, chokes mid-range GPUs, and still hallucinates when asked about things it doesn't know.
 
@@ -89,10 +89,10 @@ If you prefer the classic hacker aesthetic, you can chat with your documents dir
 python main.py
 ```
 **Helpful CLI Commands:**
-* `/ingest [file.txt or .pdf]` - Feed a document into the memory engine.
-* `/model [name]` - Switch your local Ollama model on the fly.
-* `/mode [strict | balanced | conversational]` - Change how the assistant talks.
-* `/inspect [entity]` - Look under the hood at exactly what the engine knows about a topic.
+* `/ingest [file.txt or .pdf]` : Feed a document into the memory engine.
+* `/model [name]` : Switch your local Ollama model on the fly.
+* `/mode [strict | balanced | conversational]` : Change how the assistant talks.
+* `/inspect [entity]` : Look under the hood at exactly what the engine knows about a topic.
 
 ### 3. The Python Library (For Developers)
 You can import Hillock directly into your own Python applications.
@@ -123,7 +123,44 @@ python verify_hillock.py
 
 The full, detailed roadmap is tracked in **[Issue #1: The Path to v1.0](https://github.com/roandejager/Hillock/issues/1)**. 
 
-With our conversational agent update complete, our immediate next steps focus on extreme hardware optimizations—like bit-packed hypervectors and ONNX runtime exports—to push CPU speeds even higher, followed by automated data connectors for frictionless ingestion.
+With our conversational agent and performance updates complete, our immediate next steps focus on automated data connectors for frictionless directory and vault ingestion.
+
+---
+
+## 💼 Commercial Dual Licensing
+
+Hillock is free and open-source under the **GNU Affero General Public License v3.0 (AGPL-3.0)**. Under the terms of the AGPL, any company or developer building closed-source, proprietary software on top of Hillock must also release their entire proprietary codebase publicly under the AGPL-3.0.
+
+If you are a startup, enterprise, or commercial developer building proprietary software and want to embed Hillock without open-sourcing your own application code, you must obtain an **AGPL-Exempt Commercial License**.
+
+### What the commercial license includes:
+* **AGPL-3.0 Exemption:** Keep your product, custom integrations, and intellectual property completely closed-source and proprietary.
+* **Full Legal Indemnity:** Commercial protection to distribute Hillock inside your proprietary apps, on-premise tools, or SaaS backends.
+* **Direct Integration Support:** Priority email support directly with the maintainer for architecture design, performance tuning, and hardware pipelines.
+
+### Pricing:
+* **$49 per month** : [Purchase Monthly License](https://hillock.lemonsqueezy.com/checkout/buy/8c0f191c-e488-479b-818a-0d87226b638e)
+* **$499 per year** : [Purchase Annual License](https://hillock.lemonsqueezy.com/checkout/buy/1566c0ba-6432-48ec-8e7c-8259a058bcd1)
+
+*If you need custom SLA terms, bespoke enterprise deployments, or custom relation extraction schemas, reach out directly at [contact.roandejager@gmail.com](mailto:contact.roandejager@gmail.com).*
+
+---
+
+## 🤝 Sponsors & Community Support
+
+Hillock is an independent, open-source research project built for engineers running local AI on consumer hardware. Supporting Hillock directly funds local edge-first AI research and puts your developer tool or infrastructure platform in front of engineers building with this repository.
+
+### One-Time Support:
+* **[Tip or Buy a Coffee](https://hillock.lemonsqueezy.com/checkout/buy/86c9b457-e8de-45d7-9c34-18421d7d787e)** : Leave a custom one-time contribution to support ongoing open-source development.
+
+### Sponsorship Tiers:
+* **Backer ($15 per month):** Your name or GitHub handle permanently listed in the README Backers section. [Become a Backer](https://hillock.lemonsqueezy.com/checkout/buy/9ad8886f-5aa5-4f9d-9d6c-9e5bb7fcc9eb).
+* **Featured Partner ($100 per month):** Your product logo, link, and short description placed near the top of the README.
+* **Enterprise Sponsor ($300 per month):** Large logo placement across both the README and documentation, plus social shoutouts.
+
+Interested in becoming a Featured Partner or Enterprise Sponsor for your developer tool? Reach out directly via [GitHub Discussions](https://github.com/roandejager/Hillock/discussions) or browse our store:
+
+* **[Visit the Lemon Squeezy Store](https://hillock.lemonsqueezy.com)**
 
 ---
 
