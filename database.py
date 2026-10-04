@@ -4,7 +4,7 @@ import sqlite3
 import re
 import numpy as np
 from typing import List, Tuple, Optional, Set
-from config import DB_FILE
+from config import DB_FILE, SINGLE_VALUED_PREDICATES
 
 class SQLiteKnowledgeGraph:
     """Manages the decoupled symbolic database (Filing Cabinet)."""
@@ -153,6 +153,10 @@ class SQLiteKnowledgeGraph:
 
                 cursor.execute("INSERT OR IGNORE INTO entities (id, name, type) VALUES (?, ?, ?)", (src_key, src_key.replace("_", " "), source_type))
                 cursor.execute("INSERT OR IGNORE INTO entities (id, name, type) VALUES (?, ?, ?)", (tgt_key, tgt_key.replace("_", " "), target_type))
+
+                # v0.9: Enforce single-valued predicate overwrite
+                if predicate in SINGLE_VALUED_PREDICATES:
+                    cursor.execute("DELETE FROM relations WHERE source_id = ? AND predicate = ?", (src_key, predicate))
 
                 cursor.execute("""
                     INSERT OR REPLACE INTO relations (source_id, predicate, target_id, source_doc) 
