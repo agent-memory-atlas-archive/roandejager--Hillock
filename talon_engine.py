@@ -587,7 +587,7 @@ class TalonEngine:
         torch.cuda.empty_cache()
 
     def process_document(self, document_text: str, batch_size: int = 16) -> List[Dict[str, str]]:
-        logger.info("=== Starting TALON High-Speed Ingestion Pipeline (CUDA Batched) ===")
+        logger.info("=== Starting TALON High-Speed Ingestion Pipeline ===")
         self.t_first_triple = None
         self.t_last_triple = None
 
@@ -597,7 +597,10 @@ class TalonEngine:
 
         # Step 2: Split into sentences
         sentences = [s.strip() for s in re.split(r"[.!?\n]", resolved_doc) if s.strip()]
-        logger.info(f"[TALON Engine] Processing {len(sentences)} resolved sentences in CUDA batches of {batch_size}...")
+        
+        # v0.9: Dynamic logging for CPU vs CUDA
+        device_name = "CUDA" if "cuda" in str(self.device).lower() else "CPU"
+        logger.info(f"[TALON Engine] Processing {len(sentences)} resolved sentences in {device_name} batches of {batch_size}...")
 
         if not sentences:
             self.t_last_triple = time.perf_counter()

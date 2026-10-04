@@ -197,7 +197,19 @@ class IntegratedHillock:
         if not facts:
             return []
 
-        query_tokens = set(re.sub(r"[^\w\s]", "", query).lower().split())
+        # v0.9: HYDRA Dilution Fix - Filter out function/stop words before MaxSim calculation
+        stop_words = {
+            "who", "what", "where", "when", "why", "how", "which", "whom", 
+            "was", "is", "were", "are", "did", "do", "does", "has", "had",
+            "the", "a", "an", "and", "or", "in", "on", "at", "to", "of", "for", "with", "by"
+        }
+        
+        raw_tokens = set(re.sub(r"[^\w\s]", "", query).lower().split())
+        query_tokens = raw_tokens - stop_words
+        
+        # Fallback: if the user literally just typed "who is the", don't empty the query entirely
+        if not query_tokens:
+            query_tokens = raw_tokens
 
         query_components = set()
         for token in query_tokens:
