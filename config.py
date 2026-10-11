@@ -3,7 +3,10 @@
 # File and Model Paths
 DB_FILE = "hillock_kg.db"
 OLLAMA_MODEL = "llama3.2" # or "phi:mini" if you prefer
-LLM_BASE_URL = "http://localhost:11434/v1/chat/completions"
+LLM_BASE_URL = "http://127.0.0.1:11434/v1/chat/completions"
+
+# Schema Constraints (v0.9)
+SINGLE_VALUED_PREDICATES = {"born_in", "died_in", "place_of_birth", "place_of_death", "capital_of"}
 
 # HDC Hyperparameters (v0.4.1 Recalibrated for SimHash Baseline)
 HDC_DIMENSION = 10000

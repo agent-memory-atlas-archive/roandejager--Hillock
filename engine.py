@@ -8,7 +8,7 @@ import numpy as np
 import logging
 import urllib.request
 import sqlite3
-from typing import List, Tuple, Set, Optional
+from typing import List, Tuple, Set, Optional, Any, Generator
 
 from config import DB_FILE, OLLAMA_MODEL, LLM_BASE_URL, HDC_THRESHOLD
 from database import SQLiteKnowledgeGraph
@@ -133,7 +133,7 @@ class IntegratedHillock:
 
     def list_local_ollama_models(self) -> List[str]:
         """Queries local Ollama tags API to discover available models on user's PC."""
-        url = "http://localhost:11434/api/tags"
+        url = "http://127.0.0.1:11434/api/tags"
         try:
             req = urllib.request.Request(url, method="GET")
             with urllib.request.urlopen(req, timeout=5) as response:
@@ -143,8 +143,8 @@ class IntegratedHillock:
         except Exception:
             return []
 
-    def query_ollama_stream(self, prompt: str, system_prompt: str) -> Optional[str]:
-        """Token-streaming generator using the universal OpenAI-compatible format."""
+    def query_ollama_generator(self, prompt: str, system_prompt: str) -> Generator[str, None, None]:
+        """True token-streaming generator for the FastAPI SSE endpoint."""
         url = LLM_BASE_URL
         payload = {
             "model": self.ollama_model,
@@ -162,14 +162,9 @@ class IntegratedHillock:
                 headers={"Content-Type": "application/json"},
                 method="POST"
             )
-            full_response = []
-            sys.stdout.write("Hillock (Renderer) > ")
-            sys.stdout.flush()
-
             with urllib.request.urlopen(req, timeout=180) as response:
                 for line in response:
                     if line:
-                        # The OpenAI stream format prefixes lines with "data: "
                         decoded_line = line.decode("utf-8").strip()
                         if decoded_line.startswith("data: "):
                             data_str = decoded_line[6:]
@@ -177,27 +172,34 @@ class IntegratedHillock:
                                 break
                             try:
                                 chunk = json.loads(data_str)
-                                # Extract token from the OpenAI delta format
                                 if "choices" in chunk and len(chunk["choices"]) > 0:
                                     delta = chunk["choices"][0].get("delta", {})
                                     token = delta.get("content", "")
                                     if token:
-                                        sys.stdout.write(token)
-                                        sys.stdout.flush()
-                                        full_response.append(token)
+                                        yield token
                             except json.JSONDecodeError:
                                 continue
-            print()  # Newline after stream finishes
-            return "".join(full_response).strip()
         except Exception as e:
-            logger.error(f"LLM streaming error: {e}")
-            return None
+            logger.error(f"LLM streaming generator error: {e}")
+            yield ""
 
     def select_answering_facts(self, query: str, facts: List[Tuple[str, str, str, str]], threshold: float = HDC_THRESHOLD) -> List[Tuple[str, str, str, str, float]]:
         if not facts:
             return []
 
-        query_tokens = set(re.sub(r"[^\w\s]", "", query).lower().split())
+        # v0.9: HYDRA Dilution Fix - Filter out function/stop words before MaxSim calculation
+        stop_words = {
+            "who", "what", "where", "when", "why", "how", "which", "whom", 
+            "was", "is", "were", "are", "did", "do", "does", "has", "had",
+            "the", "a", "an", "and", "or", "in", "on", "at", "to", "of", "for", "with", "by"
+        }
+        
+        raw_tokens = set(re.sub(r"[^\w\s]", "", query).lower().split())
+        query_tokens = raw_tokens - stop_words
+        
+        # Fallback: if the user literally just typed "who is the", don't empty the query entirely
+        if not query_tokens:
+            query_tokens = raw_tokens
 
         query_components = set()
         for token in query_tokens:
@@ -250,7 +252,7 @@ class IntegratedHillock:
         scored_facts.sort(key=lambda x: x[4], reverse=True)
         return scored_facts
 
-    def execute_chat_turn(self, query: str) -> Tuple[str, List[Tuple[str, float]], List[Tuple[str, float]], str]:
+    def execute_chat_turn(self, query: str, stream_generator: bool = False) -> Tuple[Any, List[Tuple[str, float]], List[Tuple[str, float]], str]:
         is_query = self.is_question(query)
 
         greetings = {"hello", "hi", "hey", "greetings", "thanks", "thank you", "bye", "goodbye"}
@@ -259,6 +261,8 @@ class IntegratedHillock:
         if query_clean in greetings or len(query_clean.split()) < 2:
             if self.verbosity_mode == "CONVERSATIONAL":
                 sys_prompt = "You are a warm, chatty, and highly engaging personal AI assistant. The user just greeted you. Greet them back naturally, warmly, and ask what they would like to learn from your memory today."
+                if stream_generator:
+                    return self.query_ollama_generator(f"User says: {query}", sys_prompt), [], [], "GREETING"
                 llm_response = self.query_ollama_stream(f"User says: {query}", sys_prompt)
                 if llm_response:
                     return f"Hillock (Renderer) > {llm_response}", [], [], "GREETING"
@@ -314,6 +318,9 @@ class IntegratedHillock:
                     primed_info = self.plasticity.get_associated_priming_context(source_id)
                     system_prompt, render_prompt = self._get_mode_prompts(query, facts_str, primed_info, hdc_fingerprint, is_refusal=False)
 
+                    if stream_generator:
+                        return self.query_ollama_generator(render_prompt, system_prompt), primed_info, hdc_fingerprint, "RENDER_SUCCESS"
+                    
                     llm_response = self.query_ollama_stream(render_prompt, system_prompt)
                     if llm_response:
                         return f"Hillock (Renderer) > {llm_response}", primed_info, hdc_fingerprint, "RENDER_SUCCESS"
@@ -332,6 +339,10 @@ class IntegratedHillock:
 
         # If in BALANCED or CONVERSATIONAL mode, let the LLM render a polite refusal
         system_prompt, render_prompt = self._get_mode_prompts(query, "", [], hdc_fingerprint, is_refusal=True)
+        
+        if stream_generator:
+            return self.query_ollama_generator(render_prompt, system_prompt), [], hdc_fingerprint, "CONVERSATIONAL_REFUSAL"
+            
         llm_response = self.query_ollama_stream(render_prompt, system_prompt)
         
         if llm_response:

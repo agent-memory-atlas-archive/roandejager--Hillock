@@ -190,7 +190,10 @@ def main() -> None:
     from config import HDC_THRESHOLD
     passes = sum(1 for a, m, _ in rows if a and m is not None and m >= HDC_THRESHOLD)
     leaks = sum(1 for a, m, _ in rows if not a and m is not None and m >= HDC_THRESHOLD)
+    
+    # v0.9: Strictly assert that 0 hallucination leaks occurred
     check("gate-distribution-ran", len(rows) == 32, f"verified gate distribution on {len(rows)} queries")
+    check("gate-zero-leaks", leaks == 0, f"expected 0 hallucination leaks, got {leaks}")
 
     # ------------------------------------------------------------ Summary
     print("\n" + "=" * 70)

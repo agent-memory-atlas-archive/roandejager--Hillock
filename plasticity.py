@@ -19,6 +19,7 @@ class HebbianPlasticityEngine:
         sorted_entities = sorted(list(active_entities))
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
+            cursor.execute("PRAGMA foreign_keys = ON;")
             for i in range(len(sorted_entities)):
                 for j in range(i + 1, len(sorted_entities)):
                     ent_a, ent_b = sorted_entities[i], sorted_entities[j]
@@ -51,12 +52,14 @@ class HebbianPlasticityEngine:
     def _apply_global_decay(self) -> None:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
+            cursor.execute("PRAGMA foreign_keys = ON;")
             cursor.execute("UPDATE hebbian_weights SET weight = weight * ?", (1.0 - self.decay,))
             conn.commit()
 
     def get_associated_priming_context(self, entity: str, threshold: float = 0.05) -> List[Tuple[str, float]]:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
+            cursor.execute("PRAGMA foreign_keys = ON;")
             cursor.execute("""
                            SELECT entity_b, weight
                            FROM hebbian_weights
