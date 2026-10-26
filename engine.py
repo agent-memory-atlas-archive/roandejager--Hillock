@@ -104,6 +104,11 @@ class IntegratedHillock:
         clean_name = re.sub(r"[_']s$", "", name_str.strip(), flags=re.IGNORECASE)
         normalized_new = clean_name.replace(" ", "_").lower()
 
+        # v0.10: Check the Aliasing Layer first (O(1) lookup)
+        canonical = self.kg.get_canonical_id(normalized_new)
+        if canonical:
+            return canonical
+
         if len(normalized_new) <= 2:
             return clean_name.replace(" ", "_")
 
@@ -119,6 +124,36 @@ class IntegratedHillock:
                 return ent_id
 
         return clean_name.replace(" ", "_")
+
+    def merge_entities(self, target_str: str, canonical_str: str) -> Tuple[bool, str]:
+        """Merges a fractured target node into a canonical root node across DB and HDC space."""
+        target_id = self.resolve_entity_identity(target_str)
+        canonical_id = self.resolve_entity_identity(canonical_str)
+
+        if target_id == canonical_id:
+            return False, "Entities already resolve to the same canonical ID."
+
+        # Ensure canonical exists in DB before merging
+        if canonical_id not in self.kg.get_all_entity_ids():
+            with sqlite3.connect(self.kg.db_path) as conn:
+                conn.execute("INSERT OR IGNORE INTO entities (id, name, type) VALUES (?, ?, 'Generic')", (canonical_id, canonical_id.replace("_", " ")))
+
+        # 1. Merge in SQLite (Relations & Synapses)
+        self.kg.merge_nodes(target_id, canonical_id)
+
+        # 2. Merge in HDC Space (Superpose vectors so the canonical node inherits the target's semantic meaning)
+        if target_id in self.hdc.codebook:
+            h_old = self.hdc.codebook[target_id]
+            h_can = self.hdc.get_or_allocate_hypervector(canonical_id)
+
+            # Bipolar superposition
+            h_new = np.sign(h_old.astype(np.int32) + h_can.astype(np.int32)).astype(np.int8)
+            h_new[h_new == 0] = 1
+
+            self.hdc.codebook[canonical_id] = h_new
+            del self.hdc.codebook[target_id]
+
+        return True, f"Successfully merged '{target_id}' into '{canonical_id}'."
 
     def link_entities(self, query: str) -> Set[str]:
         detected = set()

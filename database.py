@@ -57,6 +57,15 @@ class SQLiteKnowledgeGraph:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+            # v0.10: Entity Aliasing Layer
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS entity_aliases (
+                    alias_id TEXT PRIMARY KEY,
+                    canonical_id TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (canonical_id) REFERENCES entities(id) ON DELETE CASCADE
+                )
+            """)
             conn.commit()
 
     def clear_and_reinitialize(self) -> None:
@@ -67,6 +76,7 @@ class SQLiteKnowledgeGraph:
             cursor.execute("DROP TABLE IF EXISTS hdc_reservoirs;")
             cursor.execute("DROP TABLE IF EXISTS hebbian_weights;")
             cursor.execute("DROP TABLE IF EXISTS relations;")
+            cursor.execute("DROP TABLE IF EXISTS entity_aliases;")
             cursor.execute("DROP TABLE IF EXISTS entities;")
             conn.commit()
         self._initialize_db()
@@ -107,6 +117,7 @@ class SQLiteKnowledgeGraph:
             cursor.execute("PRAGMA foreign_keys = OFF;")
             cursor.execute("DROP TABLE IF EXISTS hebbian_weights;")
             cursor.execute("DROP TABLE IF EXISTS relations;")
+            cursor.execute("DROP TABLE IF EXISTS entity_aliases;")
             cursor.execute("DROP TABLE IF EXISTS entities;")
             cursor.execute("DROP TABLE IF EXISTS hdc_reservoirs;")
             conn.commit()
@@ -215,4 +226,46 @@ class SQLiteKnowledgeGraph:
                 INSERT OR REPLACE INTO hdc_reservoirs (doc_id, reservoir_vector, bound_path_count) 
                 VALUES (?, ?, ?)
             """, (doc_id, vector_bytes, path_count))
+            conn.commit()
+
+    def get_canonical_id(self, entity_id: str) -> Optional[str]:
+        """Checks if an entity string is a known alias and returns its canonical root."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT canonical_id FROM entity_aliases WHERE alias_id = ?", (entity_id,))
+            res = cursor.fetchone()
+            return res[0] if res else None
+
+    def add_alias(self, alias_id: str, canonical_id: str) -> None:
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA foreign_keys = ON;")
+            cursor.execute("INSERT OR REPLACE INTO entity_aliases (alias_id, canonical_id) VALUES (?, ?)", (alias_id, canonical_id))
+            conn.commit()
+
+    def merge_nodes(self, old_id: str, canonical_id: str) -> None:
+        """Collapses old_id into canonical_id, migrating all relations and synapses."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA foreign_keys = ON;")
+            cursor.execute("BEGIN TRANSACTION;")
+            
+            # 1. Migrate Relations (Source)
+            cursor.execute("UPDATE OR IGNORE relations SET source_id = ? WHERE source_id = ?", (canonical_id, old_id))
+            cursor.execute("DELETE FROM relations WHERE source_id = ?", (old_id,))
+            
+            # 2. Migrate Relations (Target)
+            cursor.execute("UPDATE OR IGNORE relations SET target_id = ? WHERE target_id = ?", (canonical_id, old_id))
+            cursor.execute("DELETE FROM relations WHERE target_id = ?", (old_id,))
+            
+            # 3. Migrate Synapses (Hebbian Weights)
+            cursor.execute("UPDATE OR IGNORE hebbian_weights SET entity_a = ? WHERE entity_a = ?", (canonical_id, old_id))
+            cursor.execute("DELETE FROM hebbian_weights WHERE entity_a = ?", (old_id,))
+            cursor.execute("UPDATE OR IGNORE hebbian_weights SET entity_b = ? WHERE entity_b = ?", (canonical_id, old_id))
+            cursor.execute("DELETE FROM hebbian_weights WHERE entity_b = ?", (old_id,))
+            
+            # 4. Register the Alias and Delete the Old Node
+            cursor.execute("INSERT OR REPLACE INTO entity_aliases (alias_id, canonical_id) VALUES (?, ?)", (old_id, canonical_id))
+            cursor.execute("DELETE FROM entities WHERE id = ?", (old_id,))
+            
             conn.commit()
