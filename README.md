@@ -4,34 +4,40 @@
 
 # Hillock
 
-**A lightweight, 100% local memory engine built for edge hardware.**
+**A lightweight, 100% local neuro-symbolic memory engine built for edge hardware.**
 
 ![License](https://img.shields.io/badge/license-AGPL--3.0-blue)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![VRAM](https://img.shields.io/badge/VRAM-%3C1.2GB-brightgreen)
-![Status](https://img.shields.io/badge/status-v0.8.0-orange)
+![Status](https://img.shields.io/badge/status-v1.0.0_Stable-orange)
 [![Discord](https://img.shields.io/badge/Discord-Join%20Community-5865F2?logo=discord&logoColor=white)](https://discord.gg/BGUPNBcVdp)
 
-Traditional local RAG is heavy. Running dense vector databases and using 8B+ generative LLMs just to parse documents burns VRAM, chokes mid-range GPUs, and still hallucinates when asked about things it doesn't know.
+Traditional local RAG setups are pretty bloated. Running massive vector databases and burning an 8B model just to read documents eats up your VRAM, slows down your machine, and still makes things up when it does not know the answer.
 
-Hillock was built to solve this. It replaces bloated vector databases and token-hungry extraction passes with a lightweight, three-tier architecture: a relational SQLite Knowledge Graph, Hebbian synaptic memory, and Hyperdimensional Computing (HDC). 
+Hillock was built to fix that. Instead of dumping raw text into vector chunks, it uses a simple three-part setup: a local SQLite Knowledge Graph, Hebbian synaptic associations, and Hyperdimensional Computing (HDC) math.
 
-It extracts facts, blocks unanswerable questions mathematically before they ever reach the LLM, and runs entirely in under 1.2 GB of VRAM.
+It extracts clean facts, checks if it actually knows the answer using vector math before calling the LLM, and runs comfortably on normal consumer hardware with under 1.2 GB of VRAM.
 
 ### Why use Hillock?
-* **Zero Hallucinations:** A hard mathematical gate blocks questions it doesn't know the answer to. It refuses honestly instead of guessing.
-* **Extremely Fast Ingestion:** It uses tensor-based classification instead of an LLM to read documents. It can ingest a 30-sentence document in about 5 seconds.
-* **Runs on a Potato:** The entire pipeline fits in <1.2 GB VRAM and can even run CPU-only if needed.
-* **API Ready (New in v0.6.x):** Hillock now includes an OpenAI-compatible API server. You can plug its hallucination-free memory directly into UIs like Open-WebUI or Obsidian.
+* **Zero Guessing:** A hard similarity gate stops questions the database cannot answer. If the data is not there, it says so directly instead of hallucinating.
+* **Fast Ingestion:** It uses small, specialized bi-encoders instead of a slow generative model to extract facts. A 30-sentence text file takes roughly 5 seconds.
+* **Runs on Low-End Hardware:** Fits under 1.2 GB VRAM and can run purely on your CPU if you do not have an NVIDIA card.
+* **OpenAI-Compatible API:** Comes with a built-in FastAPI server so you can hook it right into Open-WebUI, AnythingLLM, or Obsidian.
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
-**Prerequisites:** Python 3.10+ and [Ollama](https://ollama.com/) running locally.
+**Prerequisites:** Python 3.10+ and [Ollama](https://ollama.com/) running on your machine.
 
-### Option A: 1-Click Launch (Recommended)
-The launcher scripts create the virtual environment, install dependencies, and start the console automatically.
+### Option A: Install via PyPI
+```bash
+pip install hillock
+python -m spacy download en_core_web_sm
+```
+
+### Option B: 1-Click Launchers (From Repo)
+The setup scripts create a virtual environment, grab the dependencies, and start the CLI automatically.
 
 **Windows:**
 ```bat
@@ -44,79 +50,64 @@ chmod +x run.sh
 ./run.sh
 ```
 
-### Option B: Manual Setup
+### Option C: Manual Setup (From Source)
 ```bash
 git clone https://github.com/roandejager/Hillock.git
 cd Hillock
 
 python -m venv .venv
-source .venv/bin/activate  # or .venv\Scripts\activate on Windows
+source .venv/bin/activate  # on Windows run: .venv\Scripts\activate
 
-# Install the engine and its dependencies
+# Install the package locally
 pip install -e .
 
-# Download the required English language model
+# Download the small SpaCy model for entity parsing
 python -m spacy download en_core_web_sm
-```
-
-### Optional: ONNX CPU Predicate Routing
-
-Install the ONNX export tools and create the FP16 MiniLM model:
-```bash
-pip install -e ".[onnx-export]"
-python export_to_onnx.py
-```
-
-This writes `minilm.onnx` with dynamic batch and sequence dimensions. The ONNX router uses the CPU execution provider and the same mean-pooled, normalized cosine ranking as the PyTorch predicate router:
-```python
-from talon_engine import ONNXDynamicPredicateRouter
-
-router = ONNXDynamicPredicateRouter(model_path="minilm.onnx")
-predicates = router.select_top_predicates_batch(["Marie Curie was born in Warsaw."])
 ```
 
 ---
 
-## 🕹️ How to Use Hillock
+## How to Use Hillock
 
-Because Hillock is decoupled, you can use it in three different ways depending on your needs.
+You can interact with Hillock in three different ways depending on what you are building.
 
-### 1. The API Server (For Custom UIs)
-You can run Hillock in the background and connect it to your favorite AI interface (like Open-WebUI or AnythingLLM).
+### 1. The Local API Server
+Start the background server to connect external apps or custom frontends:
 ```bash
 python api.py
 ```
-This starts a local server at `http://localhost:8000`. Just go into your UI's settings, set the OpenAI API Base URL to `http://localhost:8000/v1`, and chat normally.
+This runs locally at `http://127.0.0.1:8000`. Point your UI (like AnythingLLM or Open-WebUI) to `http://127.0.0.1:8000/v1` as an OpenAI endpoint.
 
 ### 2. The Terminal Console
-If you prefer the classic hacker aesthetic, you can chat with your documents directly in the terminal.
+If you just want to test things out and chat directly with your memory graph:
 ```bash
 python main.py
 ```
-**Helpful CLI Commands:**
-* `/ingest [file.txt or .pdf]` : Feed a document into the memory engine.
-* `/model [name]` : Switch your local Ollama model on the fly.
-* `/mode [strict | balanced | conversational]` : Change how the assistant talks.
-* `/inspect [entity]` : Look under the hood at exactly what the engine knows about a topic.
+**Built-in Commands:**
+* `/ingest [file.txt or .pdf]` : Extract facts from a local file and store them.
+* `/alias [target] [canonical]` : Merge two names pointing to the same entity (e.g. `@john` and `john`).
+* `/model [name]` : Switch your active Ollama model on the fly.
+* `/inspect [entity]` : Check stored facts and synaptic weights for a specific node.
+* `/mode [strict | balanced | conversational]` : Adjust how the LLM phrases its answers.
 
-### 3. The Python Library (For Developers)
-You can import Hillock directly into your own Python applications.
+### 3. The Python Library
+Use it directly inside your own Python projects:
 ```python
 from engine import IntegratedHillock
 
-# Initialize the memory engine
-my_brain = IntegratedHillock("my_database.db")
+# Connect to the local database
+engine = IntegratedHillock("my_database.db")
 
-# Query it programmatically
-answer, primed_nodes, hdc_traces, mode = my_brain.execute_chat_turn("What did Alan Turing crack?")
+# Query memory directly
+answer, primed, traces, mode = engine.execute_chat_turn("Where was Marie Curie born?")
 print(answer)
 ```
 
 ---
 
-## ✅ Verification Suite
+## Running the Tests
 
-Hillock includes a standalone, GPU-free test suite that checks the core mathematical invariants, database locks, and gating logic. It is safe to wire into CI pipelines without a GPU runner.
+Hillock has a quick CPU-only test suite that validates the database constraints, Hebbian math, and HDC gating without needing a GPU or downloading large model weights:
 
 ```bash
 python verify_hillock.py
@@ -124,62 +115,39 @@ python verify_hillock.py
 
 ---
 
-## 🗺️ Roadmap to v1.0
+## Roadmap: Moving Toward v2.0
 
-The full, detailed roadmap is tracked in **[Issue #1: The Path to v1.0](https://github.com/roandejager/Hillock/issues/1)**. 
+With **v1.0.0**, the core engine is locked down and stable: the SQLite graph, the aliasing layer, and the local API are fully set up for real-world projects.
 
-With our conversational agent and performance updates complete, our immediate next steps focus on automated data connectors for frictionless directory and vault ingestion.
+Our next research phase focuses on **v2.0**, moving beyond basic vector matching into deeper logic:
 
----
-
-## 💼 Commercial Licensing & Enterprise Options
-
-Hillock is dual-licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)** and a **Commercial Closed-Source License**. 
-
-If you are embedding Hillock inside a closed-source product, proprietary SaaS, or on-premise application without releasing your source code under AGPL-3.0, you must purchase a Commercial License.
-
-### What the Commercial License Includes
-* **AGPL-3.0 Exemption:** Keep your product, custom integrations, and intellectual property completely closed-source and proprietary.
-* **Full Legal Indemnity:** Commercial protection to distribute Hillock inside your proprietary apps, on-premise tools, or SaaS backends.
-* **Direct Integration Support:** Priority email support directly with the maintainer for architecture design, performance tuning, and hardware pipelines.
-
-### License Tiers
-
-* **Startup License ($49/mo or $499/yr):** Ideal for solo developers, indie hackers, and early-stage startups embedding Hillock into a single proprietary product.
-  * 👉 **[Purchase Monthly License ($49/mo)](https://hillock.lemonsqueezy.com/checkout/buy/8c0f191c-e488-479b-818a-0d87226b638e)**
-  * 👉 **[Purchase Annual License ($499/yr)](https://hillock.lemonsqueezy.com/checkout/buy/1566c0ba-6432-48ec-8e7c-8259a058bcd1)**
-
-* **Enterprise License & Custom Deployment ($2,500+/yr):** For companies requiring custom SLAs, dedicated integration engineering, custom relation schemas, or invoice/PO payments.
-  * ✉️️ **[Contact Maintainer for Enterprise Licensing](mailto:contact.roandejager@gmail.com?subject=Hillock%20Enterprise%20Licensing)**
+* **Continuous Wave Math (FHRR):** Moving from bipolar vectors to complex-valued phase vectors so we can map soft, continuous relationships much more cleanly.
+* **Resonator Networks:** Using closed-loop matrix factorization so multi-hop questions (like "Who is the mother of the founder of company X?") can be solved directly by letting wrong paths cancel out mathematically.
+* **The Labyrinth Benchmark:** A tough, synthetic multi-hop test suite to prove that complex logical chains can be solved quickly on a laptop CPU without hallucinations.
 
 ---
 
-## 🤝 Sponsors & Community Support
+## Commercial Licensing
 
-Hillock is an independent, open-source research project built for engineers running local AI on consumer hardware. Supporting Hillock directly funds local edge-first AI research and puts your developer tool or infrastructure platform in front of engineers building with this repository.
+Hillock is dual-licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)** and a commercial license.
 
-### One-Time Support:
-* **[Tip or Buy a Coffee](https://hillock.lemonsqueezy.com/checkout/buy/86c9b457-e8de-45d7-9c34-18421d7d787e)** : Leave a custom one-time contribution to support ongoing open-source development.
+If you want to use Hillock inside a closed-source app, proprietary SaaS, or on-premise setup without open-sourcing your own code under AGPL-3.0, you will need a commercial license.
 
-### Sponsorship Tiers:
-* **Backer ($15 per month):** Your name or GitHub handle permanently listed in the README Backers section. [Become a Backer](https://hillock.lemonsqueezy.com/checkout/buy/9ad8886f-5aa5-4f9d-9d6c-9e5bb7fcc9eb).
-* **Featured Partner ($100 per month):** Your product logo, link, and short description placed near the top of the README.
-* **Enterprise Sponsor ($300 per month):** Large logo placement across both the README and documentation, plus social shoutouts.
+### Startup Commercial License (Via Polar)
+* **AGPL-3.0 Exemption:** Keep your own application code, custom logic, and models private.
+* **Commercial Indemnity:** Legal protection to distribute and run Hillock in your products.
+* **Direct Support:** Direct contact for setup help, tuning, and architecture advice.
 
-Interested in becoming a Featured Partner or Enterprise Sponsor for your developer tool? Reach out directly via [GitHub Discussions](https://github.com/roandejager/Hillock/discussions) or browse our store:
+👉 **[Get a Commercial License on Polar ($49/month)](https://buy.polar.sh/polar_cl_yhlaXkyNGFvrco9bYSMvFt6xTRgPkSHpI8cLh30tGLG)**
 
-* **[Visit the Lemon Squeezy Store](https://hillock.lemonsqueezy.com)**
+### Enterprise & Custom Deployments
+For custom SLAs, large-scale multi-node setups, or invoice payments:  
+✉️ **[Email directly for enterprise licensing](mailto:contact.roandejager@gmail.com?subject=Hillock%20Enterprise%20Licensing)**
 
 ---
 
-## ⚖️ Licensing & Contributions
+## License & Contributing
 
-Licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.
+Open-source code is released under the **AGPL-3.0 License**.
 
-To keep the project open-source while preserving the option for future commercial dual-licensing, contributors must sign a standard **Contributor License Agreement (CLA)** via `cla-assistant.io` when opening a PR. See `CONTRIBUTING.md` and `CLA.md`.
-
-## 📬 Contact & Collaboration
-
-Hillock is an active research project by **Roan de Jager**. 
-
-If you are interested in custom memory integrations, consulting on edge-AI systems, or commercial licensing, feel free to reach out directly via email at **[contact.roandejager@gmail.com](mailto:contact.roandejager@gmail.com)** or open a discussion on GitHub.
+To keep the project sustainable while supporting commercial dual-licensing, contributors sign a standard Contributor License Agreement (CLA) via `cla-assistant.io` when opening a pull request. Check out `CONTRIBUTING.md` and `CLA.md` for details.
