@@ -42,7 +42,7 @@ def print_system_dashboard(hillock: IntegratedHillock) -> None:
         ram_str = f"{ram.used / (1024**3):.1f} GB / {ram.total / (1024**3):.1f} GB ({ram.percent}% Used)"
 
     print("\n" + "="*70)
-    print("  ⛰️  HILLOCK v0.8.0 | Local Neuro-Symbolic Engine")
+    print("  ⛰️  HILLOCK v1.0.0 | Local Neuro-Symbolic Engine")
     print("  💬 Join our Developer Discord: https://discord.gg/BGUPNBcVdp")
     print("  ⭐ Commercial License & Docs:  https://github.com/roandejager/Hillock")
     print("="*70)
@@ -64,6 +64,7 @@ def print_system_dashboard(hillock: IntegratedHillock) -> None:
     print("-" * 70)
     print(" [BUILT-IN COMMAND REFERENCE]")
     print("  * /ingest [file]                 : Index TXT/PDF files locally via TALON")
+    print("  * /alias [target] [canonical]    : Merge fractured entities into one root node")
     print("  * /mode [strict/balanced/convers]: Switch active AI response personality")
     print("  * /model [model_name]            : List local models or switch LLM on the fly")
     print("  * /inspect [entity]              : View stored triples & Hebbian weights")
@@ -205,6 +206,16 @@ def run_cli():
                                 print("  -> Skipped.\n")
                 else:
                     print("Hillock [SYSTEM]: Error. Correct format is: /ingest [filename.ext]")
+                continue
+
+            if cmd == "/alias":
+                if len(cmd_parts) >= 3:
+                    target = cmd_parts[1].strip()
+                    canonical = cmd_parts[2].strip()
+                    success, msg = hillock.merge_entities(target, canonical)
+                    print(f"Hillock [SYSTEM]: {msg}")
+                else:
+                    print("Hillock [SYSTEM]: Error. Format is: /alias [target_name] [canonical_name]")
                 continue
 
             reply, primed, fingerprint, mode = hillock.execute_chat_turn(user_input)
